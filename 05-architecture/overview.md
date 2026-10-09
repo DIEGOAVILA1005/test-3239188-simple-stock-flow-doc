@@ -1,191 +1,171 @@
-# Arquitectura — Simple Stock Flow
+# Architecture — Simple Stock Flow
 
-> **Primera pasada**, reconstruida **hacia atrás** desde `spec/data-model.md` (único insumo del reto).
-> Cada afirmación lleva su fuente (`§n`, `FK-n`, `D-nn`). Lo que no sale del modelo se marca como
-> **supuesto** (`S-nn`) y se lista en §10. Esta carpeta se **cierra al final** (paso 6), contrastándola
-> con `04`, `03`, `02` y `01`.
+> **First pass**, reconstructed **backwards** from `spec/data-model.md` (the only input of the challenge).
+> Each statement has its source (`§n`, `FK-n`, `D-nn`). What does not come from the model is marked as
+> an **assumption** (`S-nn`) and is listed in §10. This folder is **closed at the end** (step 6), contrasting it
+> with `04`, `03`, `02`, and `01`.
 
 ---
 
-## 1. Estilo arquitectónico
+## 1. Architectural Style
 
-**Arquitectura hexagonal (puertos y adaptadores).** El dominio no conoce la base de datos ni el
-almacenamiento: habla con el exterior solo a través de puertos.
+**Hexagonal Architecture (Ports and Adapters).** The domain does not know the database or the storage: it communicates with the outside only through ports.
 
-| Evidencia en el modelo | Fuente |
+| Evidence in the model | Source |
 |---|---|
-| "El dominio nunca ve la clave en claro; el hash lo produce un puerto" | §1, §2.5, D-09 |
-| El reporte se calcula en el motor por un **puerto de lectura** | §1, D-06 |
-| La traducción entre colecciones de C# y tablas es responsabilidad del **adaptador de persistencia**, "donde vive el mapeo" | §0 |
-| Si `stock >= 0` salta, "algo escribió fuera del adaptador" | §1, ADR-002 |
-| El binario de imagen vive en un **almacenamiento externo**, referido por clave opaca | §1, D-08 |
-| La base **no** participa en la transacción del almacenamiento externo | §7.1 |
+| "The domain never sees the cleartext password; the hash is produced by a port" | §1, §2.5, D-09 |
+| The report is calculated in the engine by a **read port** | §1, D-06 |
+| The translation between C# collections and tables is the responsibility of the **persistence adapter**, "where the mapping lives" | §0 |
+| If `stock >= 0` trips, "something wrote outside the adapter" | §1, ADR-002 |
+| The image binary lives in **external storage**, referenced by an opaque key | §1, D-08 |
+| The database **does not** participate in the external storage transaction | §7.1 |
 
-**No es un sistema distribuido.** Hay una sola base (`simple_stock_flow`, esquema `sales`) y el
-modelo no describe ningún otro servicio con datos propios (§0, §3). **S-01:** se asume un único
-backend desplegable.
+**It is not a distributed system.** There is a single database (`simple_stock_flow`, schema `sales`) and the model does not describe any other service with its own data (§0, §3). **S-01:** a single deployable backend is assumed.
 
 ---
 
-## 2. Piezas del sistema
+## 2. System Components
 
-| Pieza | Responsabilidad | Fuente |
+| Component | Responsibility | Source |
 |---|---|---|
-| **Dominio** (`src/domain/`) | Agregados, objetos de valor (`Money`, `Quantity`), invariantes de negocio | §2, §12 |
-| **Aplicación** | Casos de uso; objetos de valor propios de consulta (*Rango de fechas*); orquesta puertos | §1 (Rango de fechas) |
-| **Adaptador saliente de persistencia** (`src/adapters/outbound/persistence/Configurations/`) | Mapeo EF Core ↔ tablas; propiedades sombra (`deleted_at`, `xmin`, FK); filtro global de baja lógica | §0, §3, §12 |
-| **Adaptador entrante (API)** | Expone el contrato HTTP. El contrato vive en `api-contract.md`, **fuera de este modelo** | §12 |
-| **Base de datos** | PostgreSQL 16, esquema `sales`. Dueño del DDL: **las migraciones de EF y nada más** | §3.2, ADR-001 |
-| **Infraestructura** | Levanta el motor; **no define el esquema** | §6.2 |
+| **Domain** (`src/domain/`) | Aggregates, value objects (`Money`, `Quantity`), business invariants | §2, §12 |
+| **Application** | Use cases; custom query value objects (*Date Range*); orchestrates ports | §1 (Date Range) |
+| **Outbound persistence adapter** (`src/adapters/outbound/persistence/Configurations/`) | EF Core ↔ tables mapping; shadow properties (`deleted_at`, `xmin`, FK); global soft delete filter | §0, §3, §12 |
+| **Inbound adapter (API)** | Exposes the HTTP contract. The contract lives in `api-contract.md`, **outside this model** | §12 |
+| **Database** | PostgreSQL 16, `sales` schema. DDL owner: **EF migrations and nothing else** | §3.2, ADR-001 |
+| **Infrastructure** | Spins up the engine; **does not define the schema** | §6.2 |
 
-Los tres repositorios del proyecto citados (`simple-stock-flow-api`, `-infra`, `-docs`) confirman la
-separación API / infraestructura / documentación (§10, §12).
+The three cited project repositories (`simple-stock-flow-api`, `-infra`, `-docs`) confirm the API / infrastructure / documentation separation (§10, §12).
 
 ---
 
-## 3. Agregados y sus fronteras
+## 3. Aggregates and their boundaries
 
-| Agregado | Raíz | Contiene | Ciclo de vida | Fuente |
+| Aggregate | Root | Contains | Lifecycle | Source |
 |---|---|---|---|---|
-| **Catálogo** | `Product` | Nombre, precio, stock, categoría, imagen (clave opaca) | Baja **lógica**, nunca física | §2.2, ADR-003 |
-| **Ventas** | `Sale` | `SaleItem` (composición, constructor `internal`) | **Inmutable** tras registrarse | §2.3, §2.4 |
-| **Identidad** | `User` | `username`, `password_hash`, `role` | Sin borrado | §2.5, §7.1 |
-| *(referencia)* | `Category` | `name` | **No es agregado**; repositorio de solo lectura; 5 filas sembradas | §2.1, §9.1 |
+| **Catalog** | `Product` | Name, price, stock, category, image (opaque key) | **Soft** delete, never physical | §2.2, ADR-003 |
+| **Sales** | `Sale` | `SaleItem` (composition, `internal` constructor) | **Immutable** after registration | §2.3, §2.4 |
+| **Identity** | `User` | `username`, `password_hash`, `role` | No deletion | §2.5, §7.1 |
+| *(reference)* | `Category` | `name` | **Not an aggregate**; read-only repository; 5 seeded rows | §2.1, §9.1 |
 
-**Regla de frontera:** los agregados se cruzan **solo por identidad de la raíz** (`category_id`,
-`product_id`, `sold_by_user_id`), nunca por navegación de objetos (§5, columna *Naturaleza*).
-`SaleItem` no existe fuera de su venta (FK-2 con `CASCADE`, §5).
+**Boundary rule:** aggregates cross paths **only by root identity** (`category_id`, `product_id`, `sold_by_user_id`), never by object navigation (§5, *Nature* column). `SaleItem` does not exist outside its sale (FK-2 with `CASCADE`, §5).
 
 ---
 
-## 4. Puertos
+## 4. Ports
 
-Los **nombres son propuestos** (S-02); lo que fija el modelo es la necesidad de cada uno.
+The **names are proposed** (S-02); what the model fixes is the need for each one.
 
-| Puerto | Tipo | Patrón de acceso que sirve | Fuente |
+| Port | Type | Access pattern served | Source |
 |---|---|---|---|
-| Repositorio de productos | Saliente | Q1 buscar (texto, categoría, activos, paginado), Q2 por id, Q3 por lote | §6.1 |
-| Repositorio de categorías | Saliente, **solo lectura** | Q4 listar, Q5 por id | §2.1, §6.1 |
-| Repositorio de ventas | Saliente | Q6 venta con líneas, Q7 por rango paginado | §6.1 |
-| **Puerto de lectura del reporte** | Saliente, **modelo de lectura** | Q9 agregación por producto en el motor. No se persiste | §1, D-06, ADR-004 |
-| Repositorio de usuarios | Saliente | Q10 por nombre exacto, en cada inicio de sesión | §6.1 |
-| **Puerto de hash de clave** | Saliente | Producir y verificar `password_hash` | D-09, §7 |
-| **Puerto de almacenamiento de imágenes** | Saliente | Guardar/borrar binario; el dominio solo ve `image_key` | D-08, §7.1 |
+| Product repository | Outbound | Q1 search (text, category, active, paginated), Q2 by id, Q3 by batch | §6.1 |
+| Category repository | Outbound, **read-only** | Q4 list, Q5 by id | §2.1, §6.1 |
+| Sales repository | Outbound | Q6 sale with lines, Q7 by paginated range | §6.1 |
+| **Report read port** | Outbound, **read model** | Q9 aggregation by product in the engine. Not persisted | §1, D-06, ADR-004 |
+| User repository | Outbound | Q10 by exact name, on every login | §6.1 |
+| **Password hashing port** | Outbound | Produce and verify `password_hash` | D-09, §7 |
+| **Image storage port** | Outbound | Save/delete binary; the domain only sees `image_key` | D-08, §7.1 |
 
-**Q8** (ventas por rango sin paginar) "no tiene consumidor" y el modelo recomienda **retirarlo del
-puerto** en vez de dejarlo como trampa (§6.1).
+**Q8** (sales by unpaginated range) "has no consumer" and the model recommends **removing it from the port** instead of leaving it as a trap (§6.1).
 
 ---
 
-## 5. Dónde vive cada regla
+## 5. Where each rule lives
 
-Este es el eje de la arquitectura: el modelo clasifica **cada regla** en una de tres marcas (§ "Cómo
-se lee"). Una invariante que solo vive en C# **protege a la aplicación, no a los datos**: un `psql`
-manual la salta sin ruido.
+This is the core of the architecture: the model classifies **each rule** into one of three marks (§ "How to read this"). An invariant that only lives in C# **protects the application, not the data**: a manual `psql` bypasses it silently.
 
-### 5.1 En el motor (hoy)
+### 5.1 In the engine (today)
 
-| Regla | Objeto | Fuente |
+| Rule | Object | Source |
 |---|---|---|
-| Claves primarias de las 5 tablas | `PK_*` | §4 |
-| `category.name` único · `user.username` único | `IX_category_name`, `IX_user_username` (índices únicos) | §4 |
-| `product.stock >= 0` | `ck_product_stock_non_negative` — "última barrera" | §2.2, ADR-002 |
-| Categoría obligatoria y existente | FK-1 `RESTRICT` | §5 |
-| Línea no existe sin venta | FK-2 `CASCADE` | §5 |
-| Baja lógica de producto | `product.deleted_at` + filtro global | §2.2, §13 D-1, ADR-003 |
-| Línea → producto no se borra | FK-3 `RESTRICT` (T-20) | §5, §13 D-2 |
-| Un producto no se repite en una venta | Índice único `(sale_id, product_id)` (T-20) | §2.3, §13 D-2 |
+| Primary keys of the 5 tables | `PK_*` | §4 |
+| `category.name` unique · `user.username` unique | `IX_category_name`, `IX_user_username` (unique indexes) | §4 |
+| `product.stock >= 0` | `ck_product_stock_non_negative` — "last barrier" | §2.2, ADR-002 |
+| Category mandatory and existing | FK-1 `RESTRICT` | §5 |
+| Line does not exist without a sale | FK-2 `CASCADE` | §5 |
+| Product soft delete | `product.deleted_at` + global filter | §2.2, §13 D-1, ADR-003 |
+| Line → product is not deleted | FK-3 `RESTRICT` (T-20) | §5, §13 D-2 |
+| A product is not repeated in a sale | Unique index `(sale_id, product_id)` (T-20) | §2.3, §13 D-2 |
 
-### 5.2 Solo dominio (deuda declarada: T-20 las baja al motor)
+### 5.2 Domain only (declared debt: T-20 moves them down to the engine)
 
-`price > 0` · `quantity > 0` · `category.name` no vacío · `user.role ∈ {admin, seller}` ·
-`username` en minúsculas y recortado (§4).
+`price > 0` · `quantity > 0` · `category.name` not empty · `user.role ∈ {admin, seller}` ·
+`username` in lowercase and trimmed (§4).
 
-### 5.3 Solo dominio **por naturaleza** (no expresables en un `CHECK`)
+### 5.3 Domain only **by nature** (not expressible in a CHECK)
 
-- **Retirar más stock del disponible falla** — regla de proceso (`Product.Withdraw`, §2.2).
-- **Una venta confirmada tiene al menos una línea** — exigiría un disparador diferido (§2.3).
-- **Descontar stock y añadir la línea son una sola operación** (`Sale.AddItem` → `Product.Withdraw`, §2.3).
-- **Inmutabilidad de la venta** — se garantiza **por ausencia** de operación de edición/borrado (§2.3).
+- **Withdrawing more stock than available fails** — process rule (`Product.Withdraw`, §2.2).
+- **A confirmed sale has at least one line** — would require a deferred trigger (§2.3).
+- **Deducting stock and adding the line are a single operation** (`Sale.AddItem` → `Product.Withdraw`, §2.3).
+- **Sale immutability** — guaranteed **by the absence** of an edit/delete operation (§2.3).
 
-### 5.4 Pendiente
+### 5.4 Pending
 
-`sale.sold_by` → `sold_by_username` y `sold_by_user_id` con FK-4 `RESTRICT` (T-12) · índices
-parciales y de trigramas (T-13) · `category_name` congelado en `sale_item` (T-11) (§3, §5, §6.2).
-
----
-
-## 6. Flujo crítico: registrar una venta
-
-1. El adaptador entrante recibe la solicitud y la traduce a un caso de uso.
-2. El caso de uso **lee los productos por lote** (Q3) — "el punto de contención de D-04" (§6.1).
-3. `Sale.AddItem` llama a `Product.Withdraw` (descuenta stock) y **copia nombre, precio y categoría
-   congelados** a la línea (§1 *Nombre congelado*, §2.3, §2.4).
-4. `Sale.EnsureConfirmable` exige al menos una línea (§2.3).
-5. El adaptador persiste **en una sola transacción**; EF detecta conflicto con `xmin` (D-04, §3).
-6. Si, pese a todo, algo escribió stock negativo, el `CHECK` del motor falla ruidosamente (ADR-002).
-
-**Qué se garantiza y qué no:** la atomicidad vale **dentro de la base**. El almacenamiento externo
-**no participa** de la transacción (§7.1), así que ninguna operación que mezcle ambos promete
-atomicidad.
+`sale.sold_by` → `sold_by_username` and `sold_by_user_id` with FK-4 `RESTRICT` (T-12) · partial and trigram indexes (T-13) · `category_name` frozen in `sale_item` (T-11) (§3, §5, §6.2).
 
 ---
 
-## 7. Concurrencia
+## 6. Critical flow: registering a sale
 
-**Optimista, con `xmin` como testigo** (D-04, T-10). `xmin` es columna de sistema de Postgres,
-expuesta como propiedad sombra, y "no aparece en `information_schema`" (§3). La última barrera ante
-una carrera que se escape del control optimista es el `CHECK` de `stock` (ADR-002).
+1. The inbound adapter receives the request and translates it into a use case.
+2. The use case **reads the products by batch** (Q3) — "the contention point of D-04" (§6.1).
+3. `Sale.AddItem` calls `Product.Withdraw` (deducts stock) and **copies frozen name, price, and category** to the line (§1 *Frozen name*, §2.3, §2.4).
+4. `Sale.EnsureConfirmable` demands at least one line (§2.3).
+5. The adapter persists **in a single transaction**; EF detects conflict with `xmin` (D-04, §3).
+6. If, despite everything, something wrote negative stock, the engine's `CHECK` fails loudly (ADR-002).
 
----
-
-## 8. Persistencia y esquema
-
-- **Las migraciones son dueñas del DDL**, sin excepción (ADR-001). Incluye extensiones: `pg_trgm`
-  se instalaría **dentro** de la migración del índice (§6.2).
-- **Ninguna columna tiene `DEFAULT`:** los valores los pone el dominio (§3).
-- **Marcas de tiempo `timestamptz`**, servidor en UTC (§3).
-- **Monomoneda:** ninguna columna de moneda (D-05).
-- **Sin columnas de auditoría** `created_at` / `updated_at` (decisión cerrada, §8 del modelo).
-- **Semilla:** 5 categorías con id fijo en la migración inicial; **el administrador inicial no**: lo
-  crea el arranque de la aplicación con credenciales de entorno (§9.1, §9.2, D-09, D-10).
-- **Nombres:** tablas en singular, esquema `sales` intacto (§0).
+**What is guaranteed and what is not:** atomicity applies **within the database**. External storage **does not participate** in the transaction (§7.1), so no operation mixing both promises atomicity.
 
 ---
 
-## 9. Seguridad y privacidad (decisiones con impacto arquitectónico)
+## 7. Concurrency
 
-| Decisión | Fuente |
+**Optimistic, with `xmin` as a witness** (D-04, T-10). `xmin` is a Postgres system column, exposed as a shadow property, and "does not appear in `information_schema`" (§3). The last barrier against a race condition escaping optimistic control is the `stock` `CHECK` (ADR-002).
+
+---
+
+## 8. Persistence and schema
+
+- **Migrations own the DDL**, no exceptions (ADR-001). Includes extensions: `pg_trgm` would be installed **inside** the index migration (§6.2).
+- **No column has a `DEFAULT`:** values are set by the domain (§3).
+- **Timestamps `timestamptz`**, server in UTC (§3).
+- **Single-currency:** no currency column (D-05).
+- **No audit columns** `created_at` / `updated_at` (closed decision, §8 of the model).
+- **Seed:** 5 categories with fixed id in the initial migration; **not the initial admin**: it is created by the application startup with environment credentials (§9.1, §9.2, D-09, D-10).
+- **Names:** singular tables, intact `sales` schema (§0).
+
+---
+
+## 9. Security and privacy (decisions with architectural impact)
+
+| Decision | Source |
 |---|---|
-| `password_hash` jamás en logs, respuestas ni proyecciones, y **nunca se indexa** | §7 |
-| El dominio nunca ve la clave en claro | D-09, §2.5 |
-| Roles cerrados: `admin`, `seller` | §1, §2.5 |
-| **Nadie otorga `admin` en ejecución:** lo provisiona el despliegue desde el entorno; un administrador da de alta vendedores | §11 H-3, DP-04 |
-| `username` y `sold_by` son **datos personales**; acceso restringido | §7 |
-| El reporte **no se desglosa por vendedor** | DP-02 |
-| No hay entidad cliente ni comprador | §1 |
+| `password_hash` never in logs, responses, or projections, and **is never indexed** | §7 |
+| The domain never sees the cleartext password | D-09, §2.5 |
+| Closed roles: `admin`, `seller` | §1, §2.5 |
+| **Nobody grants `admin` at runtime:** provisioned by the deployment from the environment; an admin registers sellers | §11 H-3, DP-04 |
+| `username` and `sold_by` are **personal data**; restricted access | §7 |
+| The report **is not broken down by seller** | DP-02 |
+| There is no client or buyer entity | §1 |
 
 ---
 
-## 10. Supuestos
+## 10. Assumptions
 
-| # | Supuesto | Por qué hace falta |
+| # | Assumption | Why it's needed |
 |---|---|---|
-| S-01 | Un único backend desplegable (no distribuido) | El modelo describe una sola base y ningún otro servicio |
-| S-02 | Los nombres de los puertos son propuestos | El modelo fija la necesidad, no el identificador |
-| S-03 | La autenticación entrega un token/sesión por el adaptador entrante | El modelo habla de "inicio de sesión" (Q10) pero no del mecanismo |
-| S-04 | No hay interfaz de usuario dentro del alcance de esta documentación | El modelo no menciona frontend |
+| S-01 | A single deployable backend (not distributed) | The model describes a single database and no other service |
+| S-02 | Port names are proposed | The model fixes the need, not the identifier |
+| S-03 | Authentication delivers a token/session via the inbound adapter | The model mentions "login" (Q10) but not the mechanism |
+| S-04 | There is no user interface within the scope of this documentation | The model does not mention a frontend |
 
 ---
 
-## 11. Puntos a verificar en el cierre (paso 6)
+## 11. Points to verify at closure (step 6)
 
-El modelo tiene incoherencias internas que la arquitectura **no debe heredar sin decirlo**:
+The model has internal inconsistencies that the architecture **must not inherit without stating them**:
 
-1. **Conteo de columnas:** §3 dice 22; el enlace y §10 dicen 21. Aquí no se fija un número.
-2. **Foto vieja vs. foto nueva:** la salida de §10 es del **2026-09-19** y §13 mide el **2026-09-20**.
-   Esta arquitectura toma §13 como estado vigente, porque "gana el motor" y es la medición posterior.
-3. **Índice `(sale_id, product_id)`:** §6.2 lo da por faltante (T-13); §2.3, §4 y §13 lo dan por
-   existente (T-20). Aquí se trata como **existente**.
-4. **`category_name`:** aparece en la tabla de `product` en §3 (error: pertenece a `sale_item`), y
-   §2.4 lo marca *motor* mientras §3 lo marca *pendiente (T-11)*. Aquí se trata como **pendiente**.
+1. **Column count:** §3 says 22; the link and §10 say 21. A number is not fixed here.
+2. **Old snapshot vs. new snapshot:** the output in §10 is from **2026-09-19** and §13 measures **2026-09-20**. This architecture takes §13 as the current state, because "the engine wins" and it is the later measurement.
+3. **Index `(sale_id, product_id)`:** §6.2 assumes it's missing (T-13); §2.3, §4 and §13 assume it exists (T-20). Here it is treated as **existing**.
+4. **`category_name`:** appears in the `product` table in §3 (error: belongs to `sale_item`), and §2.4 marks it as *engine* while §3 marks it as *pending (T-11)*. Here it is treated as **pending**.
