@@ -1,61 +1,60 @@
-# Visión — Simple Stock Flow
+# Vision — Simple Stock Flow
 
-> Reconstruida desde `spec/data-model.md`. Refleja lo que el modelo **ya compromete**; no añade
-> funcionalidades. Lo no sustentado se marca como **supuesto**.
+> Reconstructed from `spec/data-model.md`. Reflects what the model **already commits to**; adds no
+> features. What is not supported is marked as an **assumption**.
 
 ---
 
-## Declaración de visión
+## Vision Statement
 
-> **Para** el equipo operativo de un negocio con catálogo (vendedores y administrador),
-> **que necesita** vender sin pasarse del stock y saber después qué se vendió,
-> **Simple Stock Flow** es un **sistema de control de catálogo, stock y ventas**
-> **que** hace cumplir las reglas en el dato mismo, deja ventas inmutables y entrega un reporte
-> estable por producto.
-> **A diferencia de** una hoja de cálculo o de reglas que solo vive en la aplicación,
-> **nuestro sistema** garantiza en el motor lo que puede garantizarse y **declara por escrito** lo que
-> aún no.
+> **For** the operational team of a business with a catalog (sellers and administrator),
+> **who need to** sell without exceeding stock and subsequently know what was sold,
+> **Simple Stock Flow** is a **catalog, stock, and sales control system**
+> **that** enforces rules in the data itself, leaves sales immutable, and delivers a stable
+> report by product.
+> **Unlike** a spreadsheet or rules living only in the application,
+> **our system** guarantees in the engine what can be guaranteed and **declares in writing** what is
+> not yet.
 
-## Principios
+## Principles
 
-| # | Principio | Qué significa | Fuente |
+| # | Principle | What it means | Source |
 |---|---|---|---|
-| P-1 | **Simple a propósito** | Cinco entidades, cinco tablas, "sin excedente"; un producto tiene nombre, precio, stock, categoría e imagen y nada más | §2, DP-03 |
-| P-2 | **El motor manda** | Si el documento contradice a la base, el documento está roto | Intro, art. X |
-| P-3 | **Lo que no se garantiza, se declara** | Cada regla: *motor*, *solo dominio* o *pendiente*. Deuda declarada ≠ trampa silenciosa | § "Cómo se lee", §13 |
-| P-4 | **El pasado no cambia** | Ventas inmutables y valores congelados; el reporte de un rango cerrado no se mueve | §1, §2.3, §11.1 |
-| P-5 | **Nunca se pierde historia** | Baja lógica de productos; nada de borrado físico | §7.1, ADR-003 |
-| P-6 | **Datos personales mínimos** | Sin cliente final; el reporte no se desglosa por vendedor | §7, DP-02 |
-| P-7 | **Una sola fuente de verdad** | Sin `DEFAULT` en el motor; los valores los pone el dominio | §3 |
+| P-1 | **Simple by design** | Five entities, five tables, "no surplus"; a product has name, price, stock, category, and image and nothing else | §2, DP-03 |
+| P-2 | **The engine rules** | If the document contradicts the database, the document is broken | Intro, art. X |
+| P-3 | **What is not guaranteed is declared** | Every rule: *engine*, *domain only*, or *pending*. Declared debt ≠ silent trap | § "How to read this", §13 |
+| P-4 | **The past does not change** | Immutable sales and frozen values; the report for a closed range does not move | §1, §2.3, §11.1 |
+| P-5 | **History is never lost** | Soft delete for products; no physical deletion | §7.1, ADR-003 |
+| P-6 | **Minimal personal data** | No end customer; the report is not broken down by seller | §7, DP-02 |
+| P-7 | **Single source of truth** | No `DEFAULT` in the engine; values are set by the domain | §3 |
 
-## Qué entrega el producto
+## What the Product Delivers
 
-1. **Catálogo** con búsqueda, categorías fijas, baja lógica e imagen opcional (US-03 a US-08).
-2. **Ventas** que descuentan stock de forma atómica, congelan lo vendido y no se editan (US-09 a US-11).
-3. **Reporte** agregado por producto y rango, calculado en el motor y estable (US-12).
-4. **Acceso** con dos roles, sin alta anónima y sin otorgar `admin` en ejecución (US-01, US-02).
+1. **Catalog** with search, fixed categories, soft delete, and optional image (US-03 to US-08).
+2. **Sales** that deduct stock atomically, freeze sold items, and are not edited (US-09 to US-11).
+3. **Report** aggregated by product and range, calculated in the engine, and stable (US-12).
+4. **Access** with two roles, no anonymous registration, and no granting of `admin` at runtime (US-01, US-02).
 
-## Qué NO es
+## What It Is NOT
 
-Sin clientes ni compradores · sin pagos ni multimoneda · sin CRUD de categorías · sin edición ni
-anulación de ventas · sin auditoría de cambios · sin desglose por vendedor.
-*(Todo decidido y registrado: §1, §2.1, §2.3, §7, §8, D-05, DP-02, DP-03.)*
+No customers or buyers · no payments or multiple currencies · no category CRUD · no editing or
+voiding of sales · no change auditing · no seller breakdown.
+*(All decided and recorded: §1, §2.1, §2.3, §7, §8, D-05, DP-02, DP-03.)*
 
-## Cómo sabremos que funciona
+## How We Will Know It Works
 
-El modelo **no define métricas numéricas** (ver S-08 en `04-requirements/non-functional.md`). En su
-lugar fija criterios **verificables**:
+The model **does not define numerical metrics** (see S-08 in `04-requirements/non-functional-requirements.md`). Instead, it sets **verifiable** criteria:
 
-| Criterio | Cómo se comprueba | Fuente |
+| Criterion | How it is checked | Source |
 |---|---|---|
-| Ninguna venta deja el stock negativo | `ck_product_stock_non_negative` rechaza el `INSERT`/`UPDATE` | §2.2 |
-| El reporte de un rango cerrado no cambia | Misma consulta, mismo resultado tras ventas nuevas | §11.1 |
-| El documento no miente | Las consultas de §10 devuelven lo que §3, §4 y §6.2 afirman | §10 |
-| Cada deuda está registrada | El registro §13 cuadra con las marcas del documento | §13 |
+| No sale leaves stock negative | `ck_product_stock_non_negative` rejects the `INSERT`/`UPDATE` | §2.2 |
+| The report for a closed range does not change | Same query, same result after new sales | §11.1 |
+| The document does not lie | The queries in §10 return what §3, §4, and §6.2 affirm | §10 |
+| Every debt is recorded | The log in §13 matches the document's markings | §13 |
 
-## Supuestos
+## Assumptions
 
-| # | Supuesto |
+| # | Assumption |
 |---|---|
-| S-10 | El producto es **de uso interno** del negocio; no tiene tienda en línea ni acceso del comprador (coherente con la ausencia de entidad cliente, §1) |
-| S-09 | El rubro del negocio no se declara; ver `problem-framing.md` |
+| S-10 | The product is for **internal business use**; it has no online store or buyer access (consistent with the absence of a customer entity, §1) |
+| S-09 | The line of business is not stated; see `problem-framing.md` |

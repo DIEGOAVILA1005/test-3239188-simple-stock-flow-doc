@@ -1,65 +1,57 @@
-# Planteamiento del problema — Simple Stock Flow
+# Problem Framing — Simple Stock Flow
 
-> Reconstruido **hacia atrás** desde `spec/data-model.md`: el problema es el que ese modelo hace
-> necesario resolver. Lo que el modelo no afirma se marca como **supuesto**.
+> Reconstructed **backwards** from `spec/data-model.md`: the problem is the one that model makes
+> necessary to solve. What the model does not state is marked as an **assumption**.
 
 ---
 
-## 1. El problema
+## 1. The Problem
 
-Un negocio que vende artículos de un catálogo necesita **saber cuántas unidades tiene**, **vender sin
-pasarse de lo que tiene** y **saber después qué vendió y cuánto**. Sin una herramienta que haga
-cumplir esas reglas, el stock se desajusta, las ventas no dejan huella confiable y el reporte
-depende de a quién se le pregunte.
+A business that sells catalog items needs to **know how many units it has**, **sell without exceeding what it has**, and **subsequently know what it sold and how much**. Without a tool enforcing these rules, stock gets out of sync, sales leave no reliable trace, and reporting depends on who is asked.
 
-El modelo de datos delata el problema en tres frentes:
+The data model reveals the problem on three fronts:
 
-| Dolor | Cómo lo resuelve el modelo | Fuente |
+| Pain Point | How the Model Solves It | Source |
 |---|---|---|
-| **Vender lo que no hay** | `stock >= 0` garantizado por el motor; la venta falla si el stock no alcanza | §2.2, ADR-002 |
-| **Que el pasado cambie** | La línea de venta **congela** nombre, precio y categoría; la venta es inmutable | §1 *Nombre congelado*, §2.3, §2.4 |
-| **No saber qué se vende más** | Reporte agregado por producto sobre un rango de fechas, estable y calculado en el motor | §1, D-06, §11.1 |
+| **Selling what is not in stock** | `stock >= 0` guaranteed by the engine; sale fails if stock is insufficient | §2.2, ADR-002 |
+| **The past changing** | The sale line **freezes** name, price, and category; the sale is immutable | §1 *Frozen name*, §2.3, §2.4 |
+| **Not knowing what sells most** | Aggregated report by product over a date range, stable and calculated in the engine | §1, D-06, §11.1 |
 
-## 2. Quién lo padece
+## 2. Who Suffers From It
 
-| Persona | Qué necesita | Fuente |
+| Persona | What They Need | Source |
 |---|---|---|
-| **Vendedor** (`seller`) | Registrar ventas rápido y con el catálogo correcto | §1, §2.5 |
-| **Administrador** (`admin`) | Mantener catálogo y usuarios; ver reportes | §1, §11 H-3 |
+| **Seller** (`seller`) | Register sales quickly and with the correct catalog | §1, §2.5 |
+| **Administrator** (`admin`) | Maintain catalog and users; view reports | §1, §11 H-3 |
 
-**Quién no es parte del problema:** el comprador. El sistema **no tiene entidad cliente**; registra al
-**operador interno** que hizo la venta (§1, §7).
+**Who is not part of the problem:** the buyer. The system **has no customer entity**; it records the **internal operator** who made the sale (§1, §7).
 
-> **S-09.** El tipo de negocio no se declara. Las cinco categorías sembradas (*General, Herramientas,
-> Electricidad, Fontanería, Pinturas*, §9.1) sugieren un comercio de suministros o ferretería, pero
-> es una **inferencia**, no un dato del modelo.
+> **S-09.** The type of business is not stated. The five seeded categories (*General, Herramientas, Electricidad, Fontanería, Pinturas*, §9.1) suggest a supply or hardware store, but it is an **inference**, not a datum from the model.
 
-## 3. Por qué los remedios obvios no bastan
+## 3. Why Obvious Fixes Are Not Enough
 
-| Remedio obvio | Por qué falla | Fuente |
+| Obvious Fix | Why It Fails | Source |
 |---|---|---|
-| Validar el stock solo en la aplicación | Un `psql` o una migración futura lo salta **sin ruido**; protege a la aplicación, no a los datos | § "Cómo se lee", §1 |
-| Leer precio y nombre del catálogo al consultar una venta | Renombrar o repreciar reescribe el histórico | §1 *Nombre congelado* |
-| Borrar productos que ya no se venden | Rompe líneas de venta y reportes | §7.1, ADR-003, FK-3 |
-| Elegir "la etiqueta más reciente" en el reporte | Una venta nueva cambiaría lo ya leído de un rango cerrado | §11.1 |
+| Validating stock only in the application | A manual `psql` or future migration bypasses it **silently**; it protects the application, not the data | § "How to read this", §1 |
+| Reading price and name from the catalog when querying a sale | Renaming or repricing rewrites history | §1 *Frozen name* |
+| Deleting products no longer sold | Breaks sale lines and reports | §7.1, ADR-003, FK-3 |
+| Choosing "the most recent label" in the report | A new sale would alter already read data from a closed range | §11.1 |
 
-## 4. Qué NO es el problema
+## 4. What Is NOT the Problem
 
-Se decidió dejar fuera, y no se reabre sin un requisito real:
+Decided to leave out, and won't be reopened without a real requirement:
 
-- **Clientes y compradores** (§1) · **pagos o tarjetas** (§7) · **varias monedas** (D-05)
-- **Mantenimiento de categorías** (§2.1, §4.1) · **editar o anular ventas** (§2.3)
-- **Auditoría de cambios** (§8) · **atributos extra de producto** (DP-03)
-- **Análisis por vendedor** (DP-02)
+- **Customers and buyers** (§1) · **payments or cards** (§7) · **multiple currencies** (D-05)
+- **Category maintenance** (§2.1, §4.1) · **editing or voiding sales** (§2.3)
+- **Change audit** (§8) · **extra product attributes** (DP-03)
+- **Analysis by seller** (DP-02)
 
-## 5. Restricciones que condicionan la solución
+## 5. Constraints Conditioning the Solution
 
-- **Honestidad sobre lo que está garantizado:** cada regla se declara *motor*, *solo dominio* o
-  *pendiente*; no se promete lo que no existe (§ "Cómo se lee", §13).
-- **Superficie de privacidad pequeña** (§7).
-- **El motor manda:** si el documento contradice a la base, el documento está roto (§ intro, art. X).
+- **Honesty about what is guaranteed:** every rule is declared *engine*, *domain only*, or *pending*; what does not exist is not promised (§ "How to read this", §13).
+- **Small privacy surface** (§7).
+- **The engine rules:** if the document contradicts the database, the document is broken (§ intro, art. X).
 
-## 6. Pregunta que el producto debe responder
+## 6. Question the Product Must Answer
 
-> *¿Puedo registrar una venta con la certeza de que el stock es correcto, que el registro no
-> cambiará nunca, y que luego puedo saber qué se vendió?*
+> *Can I register a sale with certainty that stock is correct, that the record will never change, and that I can later know what was sold?*
