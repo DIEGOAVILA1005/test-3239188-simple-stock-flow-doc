@@ -1,67 +1,64 @@
-# Requisitos no funcionales — Simple Stock Flow
+# Non-Functional Requirements — Simple Stock Flow
 
-> Derivados de `spec/data-model.md`. Cada requisito cita su fuente. El modelo **no fija umbrales
-> numéricos** (latencia, volumen, disponibilidad): donde un requisito sería cuantitativo, se declara
-> como **supuesto** y no se inventa una cifra.
+> Derived from `spec/data-model.md`. Each requirement cites its source. The model **does not set numerical thresholds** (latency, volume, availability): where a requirement would be quantitative, it is declared as an **assumption** and no figure is invented.
 
 ---
 
-## Integridad de los datos
+## Data Integrity
 
-| ID | Requisito | Fuente |
+| ID | Requirement | Source |
 |---|---|---|
-| **NFR-01** | `product.stock` **nunca** es negativo, y esa garantía vive **en el motor** (`ck_product_stock_non_negative`), no solo en la aplicación | §2.2, ADR-002 |
-| **NFR-02** | Las invariantes marcadas *solo dominio* (`price > 0`, `quantity > 0`, nombre de categoría no vacío, `role ∈ {admin, seller}`, `username` en minúsculas) **bajan al motor** como `CHECK`. Mientras tanto, se declaran como deuda: un `INSERT` por `psql` las salta | §4, T-20 |
-| **NFR-03** | Toda relación entre tablas tiene política explícita de borrado: FK-1 y FK-3 `RESTRICT`, FK-2 `CASCADE`, FK-4 `RESTRICT` (pendiente). `ON UPDATE NO ACTION` en todas | §5 |
-| **NFR-04** | Nada se borra físicamente salvo el binario de imagen: productos con baja lógica; ventas, líneas, usuarios y categorías sin borrado | §7.1, ADR-003 |
-| **NFR-05** | Las ventas son **inmutables**: no existe operación de edición ni de borrado | §2.3 |
+| **NFR-01** | `product.stock` is **never** negative, and that guarantee lives **in the engine** (`ck_product_stock_non_negative`), not just in the application | §2.2, ADR-002 |
+| **NFR-02** | Invariants marked *domain only* (`price > 0`, `quantity > 0`, category name not empty, `role ∈ {admin, seller}`, `username` in lowercase) **move down to the engine** as `CHECK`. Meanwhile, they are declared as debt: an `INSERT` via `psql` bypasses them | §4, T-20 |
+| **NFR-03** | Every relationship between tables has an explicit delete policy: FK-1 and FK-3 `RESTRICT`, FK-2 `CASCADE`, FK-4 `RESTRICT` (pending). `ON UPDATE NO ACTION` on all | §5 |
+| **NFR-04** | Nothing is physically deleted except the image binary: products with soft delete; sales, lines, users, and categories without deletion | §7.1, ADR-003 |
+| **NFR-05** | Sales are **immutable**: there is no edit or delete operation | §2.3 |
 
-## Concurrencia y consistencia
+## Concurrency and Consistency
 
-| ID | Requisito | Fuente |
+| ID | Requirement | Source |
 |---|---|---|
-| **NFR-06** | La concurrencia sobre el stock es **optimista**: el conflicto se detecta por `xmin` y el segundo escritor no pisa al primero | D-04, ADR-002, §3 |
-| **NFR-07** | Registrar una venta descuenta stock y añade la línea como **una sola operación**, dentro de una transacción de base | §2.3 |
-| **NFR-08** | **No se promete** atomicidad entre la base y el almacenamiento externo de imágenes; el orden es: anular la clave, confirmar, y **después** borrar el binario | §7.1 |
-| **NFR-09** | Todas las marcas de tiempo son `timestamptz` y el servidor corre en UTC | §3 |
-| **NFR-10** | El sistema es **monomoneda**: ninguna tabla tiene columna de moneda. `Money` redondea a 2 decimales (`AwayFromZero`) y coincide con `numeric(18,2)`; si uno cambia, cambia el otro en la misma migración | D-05, §2.2 |
+| **NFR-06** | Concurrency over stock is **optimistic**: conflict is detected by `xmin` and the second writer does not overwrite the first | D-04, ADR-002, §3 |
+| **NFR-07** | Registering a sale deducts stock and adds the line as **a single operation**, within a database transaction | §2.3 |
+| **NFR-08** | Atomicity **is not promised** between the database and external image storage; the order is: invalidate the key, commit, and **then** delete the binary | §7.1 |
+| **NFR-09** | All timestamps are `timestamptz` and the server runs in UTC | §3 |
+| **NFR-10** | The system is **single-currency**: no table has a currency column. `Money` rounds to 2 decimal places (`AwayFromZero`) and matches `numeric(18,2)`; if one changes, the other changes in the same migration | D-05, §2.2 |
 
-## Seguridad y privacidad
+## Security and Privacy
 
-| ID | Requisito | Fuente |
+| ID | Requirement | Source |
 |---|---|---|
-| **NFR-11** | `password_hash` es un **secreto**: jamás en logs, respuestas, proyecciones ni mensajes de error, y **nunca se indexa** | §7 |
-| **NFR-12** | El dominio **nunca ve la clave en claro**; el hash lo produce un puerto | D-09, §2.5 |
-| **NFR-13** | `username` y `sold_by` son **datos personales**: acceso restringido, no admisibles en respuestas anónimas | §7 |
-| **NFR-14** | La superficie de privacidad es **mínima**: no hay datos de cliente final, pagos ni salud, y el reporte no se desglosa por vendedor | §7, DP-02 |
-| **NFR-15** | El rol `admin` **no se otorga en ejecución**; se provisiona desde el entorno. El administrador inicial no se siembra desde SQL ni con un hash literal versionado | §9.2, DP-04, art. IX |
+| **NFR-11** | `password_hash` is a **secret**: never in logs, responses, projections, or error messages, and **is never indexed** | §7 |
+| **NFR-12** | The domain **never sees the cleartext password**; the hash is produced by a port | D-09, §2.5 |
+| **NFR-13** | `username` and `sold_by` are **personal data**: restricted access, not allowed in anonymous responses | §7 |
+| **NFR-14** | Privacy surface is **minimal**: no end-customer, payment, or health data, and the report is not broken down by seller | §7, DP-02 |
+| **NFR-15** | The `admin` role **is not granted at runtime**; it is provisioned from the environment. The initial admin is not seeded from SQL or with a versioned literal hash | §9.2, DP-04, art. IX |
 
-## Rendimiento
+## Performance
 
-| ID | Requisito | Fuente |
+| ID | Requirement | Source |
 |---|---|---|
-| **NFR-16** | Los patrones de **alta frecuencia** (búsqueda de producto Q1, lectura por lote Q3, ventas por rango Q7, reporte Q9, usuario por nombre Q10) están **respaldados por índices** que existen o tienen tarea | §6.1, §6.2 |
-| **NFR-17** | La **búsqueda de texto parcial** usa un índice de trigramas, porque ningún árbol B sirve un comodín a la izquierda. La extensión `pg_trgm` se instala **dentro** de la migración del índice | §6.2, T-13 |
-| **NFR-18** | El **reporte agregado se calcula en el motor**, no en memoria, y su agregación no toca la tabla (índice con columnas incluidas) | D-06, §6.2 |
-| **NFR-19** | Los índices que no se justifican **se descartan por escrito** (`stock`, `role`, `image_key`, `password_hash`…): un índice de más encarece cada escritura | §6.3 |
+| **NFR-16** | **High-frequency** patterns (product search Q1, batch read Q3, sales by range Q7, report Q9, user by name Q10) are **backed by indexes** that exist or have a task | §6.1, §6.2 |
+| **NFR-17** | **Partial text search** uses a trigram index, because no B-tree serves a wildcard on the left. The `pg_trgm` extension is installed **inside** the index migration | §6.2, T-13 |
+| **NFR-18** | The **aggregated report is calculated in the engine**, not in memory, and its aggregation does not touch the table (index with included columns) | D-06, §6.2 |
+| **NFR-19** | Indexes that are not justified **are discarded in writing** (`stock`, `role`, `image_key`, `password_hash`…): an extra index makes every write more expensive | §6.3 |
 
-> **S-08.** El modelo no define metas cuantitativas (milisegundos, usuarios concurrentes, volumen).
-> Aquí no se fijan; si se necesitan, las define el propietario.
+> **S-08.** The model does not define quantitative targets (milliseconds, concurrent users, volume). They are not set here; if needed, the owner defines them.
 
-## Mantenibilidad y operación
+## Maintainability and Operations
 
-| ID | Requisito | Fuente |
+| ID | Requirement | Source |
 |---|---|---|
-| **NFR-20** | El esquema lo poseen **solo las migraciones de EF** (incluidas las extensiones); infraestructura levanta el motor, no define el DDL | ADR-001, §3.2, §6.2 |
-| **NFR-21** | **Ninguna columna tiene `DEFAULT`**: los valores los pone el dominio, nunca el motor | §3 |
-| **NFR-22** | Tablas en **singular**, esquema `sales` intacto; los objetos que EF genera conservan su estilo y los `CHECK` van en `snake_case` (`ck_{tabla}_{regla}`) | §0, §3.1 |
-| **NFR-23** | **Sin columnas de auditoría** (`created_at`/`updated_at`); si aparece un requisito real, vuelve al propietario | §8 |
-| **NFR-24** | Las categorías se siembran con **identificadores fijos** en la migración inicial; el administrador inicial lo crea el arranque con credenciales de entorno | §9.1, §9.2 |
+| **NFR-20** | The schema is owned **only by EF migrations** (including extensions); infrastructure spins up the engine, does not define the DDL | ADR-001, §3.2, §6.2 |
+| **NFR-21** | **No column has a `DEFAULT`**: values are set by the domain, never by the engine | §3 |
+| **NFR-22** | Tables in **singular**, `sales` schema intact; objects generated by EF retain their style and `CHECK` constraints are in `snake_case` (`ck_{table}_{rule}`) | §0, §3.1 |
+| **NFR-23** | **No audit columns** (`created_at`/`updated_at`); if a real requirement arises, it goes back to the owner | §8 |
+| **NFR-24** | Categories are seeded with **fixed identifiers** in the initial migration; the initial admin is created at startup with environment credentials | §9.1, §9.2 |
 
-## Verificabilidad
+## Verifiability
 
-| ID | Requisito | Fuente |
+| ID | Requirement | Source |
 |---|---|---|
-| **NFR-25** | El modelo de datos debe poder **contrastarse con el motor** repitiendo las consultas de §10; si no coinciden, **gana el motor** y el documento está roto | §10, art. X |
-| **NFR-26** | Toda regla se **clasifica** como *motor*, *solo dominio* o *pendiente*; lo que no está aplicado se declara, no se promete | § "Cómo se lee", §13 |
-| **NFR-27** | Las mentiras conocidas del documento se registran como **deuda declarada** (D-1, D-2, D-3) en vez de dejarse silenciosas | §13 |
+| **NFR-25** | The data model must be able to be **checked against the engine** by repeating the queries in §10; if they do not match, **the engine wins** and the document is broken | §10, art. X |
+| **NFR-26** | Every rule is **classified** as *engine*, *domain only*, or *pending*; what is not applied is declared, not promised | § "How to read this", §13 |
+| **NFR-27** | Known untruths in the document are recorded as **declared debt** (D-1, D-2, D-3) instead of being left silent | §13 |
